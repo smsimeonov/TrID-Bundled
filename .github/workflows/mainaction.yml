@@ -41,7 +41,7 @@ jobs:
         zip -r trid-bundled_${{ steps.date.outputs.date }}.zip merged
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: trid-bundled_${{ steps.date.outputs.date }}
         path: trid-bundled_${{ steps.date.outputs.date }}.zip
