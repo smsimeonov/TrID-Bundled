@@ -1,8 +1,9 @@
 name: Download and Merge Zip Files
 
 on:
-  push:
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # Runs every week
 
 jobs:
   download-and-merge:
@@ -45,14 +46,48 @@ jobs:
       run: |
         zip -r trid-bundled_${{ steps.date.outputs.date }}.zip merged
 
+    - name: Generate checksum for new zip
+      id: generate_new_checksum
+      run: |
+        sha256sum trid-bundled_${{ steps.date.outputs.date }}.zip > new_checksum.txt
+
+    - name: Download previous release
+      uses: actions/download-release-asset@v1
+      with:
+        owner: ${{ github.repository_owner }}
+        repo: ${{ github.event.repository.name }}
+        tag: latest
+        asset_name: last.zip
+      continue-on-error: true
+
+    - name: Generate checksum for previous zip
+      id: generate_previous_checksum
+      run: |
+        if [ -f last.zip ]; then
+          sha256sum merged.zip > previous_checksum.txt
+        else
+          echo "No previous release found" > previous_checksum.txt
+        fi
+
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: trid-bundled_${{ steps.date.outputs.date }}
         path: trid-bundled_${{ steps.date.outputs.date }}.zip
 
+    - name: Compare checksums
+      id: compare_checksums
+      run: |
+        if [ -f previous_checksum.txt ] && cmp -s new_checksum.txt previous_checksum.txt; then
+          echo "Checksums match. No new release needed."
+          echo "checksums_match=true" >> $GITHUB_ENV
+        else
+          echo "Checksums do not match. Proceeding with release."
+          echo "checksums_match=false" >> $GITHUB_ENV
+
     - name: Create GitHub Release
       id: create_release
+      if: env.checksums_match == 'false'
       uses: actions/create-release@v1
       with:
         tag_name: v1.0.${{ github.run_number }}
@@ -61,6 +96,7 @@ jobs:
         prerelease: false
 
     - name: Upload Release Asset
+      if: env.checksums_match == 'false'
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
